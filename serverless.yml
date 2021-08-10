@@ -1,0 +1,45 @@
+service: crawler-with-selenium
+
+frameworkVersion: "2"
+
+provider:
+  name: aws
+  runtime: python3.6
+  stage: dev
+  region: ap-northeast-1
+  timeout: 900
+  lambdaHashingVersion: 20201221
+
+functions:
+  main:
+    handler: handler.main
+    maximumEventAge: 7200
+    maximumRetryAttempts: 0
+    events:
+      - schedule: cron(0 22 * * ? *)
+    environment:
+      LOGIN_ID: ${env:LOGIN_ID}
+      LOGIN_PASSWORD: ${env:LOGIN_PASSWORD}
+      UA: ${env:UA}
+      SLACK_BOT_TOKEN: ${env:SLACK_BOT_TOKEN}
+      CHANNEL_ID_TEST: ${env:CHANNEL_ID_TEST}
+      CHANNEL_ID: ${env:CHANNEL_ID}
+      AWS_PROFILE: ${env:AWS_PROFILE}
+      ACOUNT_SBI1_NAME: ${env:ACOUNT_SBI1_NAME}
+      ACOUNT_SBI2_NAME: ${env:ACOUNT_SBI2_NAME}
+      ACOUNT_BUSINESS_NAME: ${env:ACOUNT_BUSINESS_NAME}
+      SBI1_NAME: ${env:SBI1_NAME}
+      SBI2_NAME: ${env:SBI2_NAME}
+      BUSINESS_NAME: ${env:BUSINESS_NAME}
+    package:
+      patterns:
+        - ".fonts/**"
+    layers:
+      - ${env:CHROME_DRIVER_LAYER}
+      - ${env:SERVERLESS_CHROME_LAYER}
+
+    #   - ${cf:${self:provider.environment.SELENIUM_LAYER_SERVICE}-${opt:stage, self:provider.stage}.SeleniumLayerExport}
+    #   - ${cf:${self:provider.environment.SELENIUM_LAYER_SERVICE}-${opt:stage, self:provider.stage}.ChromedriverLayerExport}
+
+plugins:
+  - serverless-python-requirements
