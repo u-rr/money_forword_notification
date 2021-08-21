@@ -44,7 +44,7 @@ def main(event, context):
     # ステータスが「更新中」に変わるのを待つ
     time.sleep(3)
 
-    # ステータス「正常」が表示されるまで待つ
+    # 1行目のステータス「正常」が表示されるまで待つ
     try:
         status = WebDriverWait(driver, 300).until(EC.visibility_of_element_located((By.ID, "js-status-sentence-span-cNHmiFwd2QoSX5MiHCFs_w")))
         assert status.text == "正常"
@@ -53,8 +53,24 @@ def main(event, context):
         pass
     # タイムアウトしてもしなくても口座情報スクレイピングする
     finally:
-        # スクレイピングした口座残高データ等を変数に格納
         acount_remaining_list = acount_table_scraping(driver)
+
+    # メイン口座の代表口座の残高だけをスクレイピング
+    driver.find_element(By.CSS_SELECTOR, "#cNHmiFwd2QoSX5MiHCFs_w > td:nth-child(1) > a:nth-child(1)").click()
+    sbi_1_balance = (
+        WebDriverWait(driver, 60)
+        .until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#TABLE_1 > tbody > tr:nth-child(1) > td:nth-child(4)")))
+        .text
+    )
+
+    # 口座情報をSlackに送りやすいテキストに整形
+    acount1 = f"{SBI1_NAME}：{sbi_1_balance}\n{acount_remaining_list['sbi_1_latest_date']} {acount_remaining_list['sbi_1_status']}"
+    acount2 = (
+        f"{SBI2_NAME}：{acount_remaining_list['sbi_2_balance']}\n{acount_remaining_list['sbi_2_latest_date']} {acount_remaining_list['sbi_2_status']}"
+    )
+    acount3 = f"{BUSINESS_NAME}：{acount_remaining_list['business_balance']}\n{acount_remaining_list['business_latest_date']} {acount_remaining_list['business_status']}"
+
+    slack_send_remaining_list = f"＊——最新の口座残高（生活・事業）——＊\n{acount1}\n\n{acount2}\n\n{acount3}"
 
     # 予算ページを表示
     driver.get("https://moneyforward.com/spending_summaries")
@@ -85,7 +101,7 @@ def main(event, context):
 
     # 今日の残高に計算した結果を変数に格納
     food_remaining_per_day = calc_remaining_per_day(
-        "#budgets-progress > div > section > table > tbody > tr:nth-child(6) > td.remaining", days_left_int, driver
+        "#budgets-progress > div > section > table > tbody > tr:nth-child(5) > td.remaining", days_left_int, driver
     )
     total_remaining_per_day = calc_remaining_per_day(
         "#budgets-progress > div > section > table > tbody > tr.budget_type_total_expense.variable_type > td.remaining", days_left_int, driver
@@ -118,7 +134,7 @@ def main(event, context):
     business_balance = f"＊——事業用の残高——＊\n今月の予算残高総額：{business_total_remaining}\n\n集計期間：{period}"
 
     # slackに送信
-    send_message(f"{acount_remaining_list}\n\n{balance}\n\n{business_balance}")
+    send_message(f"{slack_send_remaining_list}\n\n{balance}\n\n{business_balance}")
     upload_img(png)
 
     # Select要素を再度取得（ページ更新でリセットされるため）
@@ -217,18 +233,20 @@ def calc_remaining_per_day(webElement: str, days_left: int, driver) -> str:
     return "{:,d}円".format(int(remaining[0:-1].replace(",", "")) // days_left)
 
 
-def acount_table_scraping(driver) -> str:
+def acount_table_scraping(driver) -> dict:
     """[summary]
-        特定の口座残高の情報をスクレイピングして文字列に変換して返す
+        特定の口座残高の情報をスクレイピングして辞書に格納して返す
     Args:
         driver ([type]): driverを渡す
 
     Returns:
-        str: slack送信用に整形された文字列
+        str: Slackに送りたい口座残高などが入った辞書
     """
+
     tableElem = WebDriverWait(driver, 10).until(EC.visibility_of_element_located((By.TAG_NAME, "table")))
     trs = tableElem.find_elements(By.TAG_NAME, "tr")
 
+    acount_table_dct = {}
     # ヘッダ行は除いて取得
     for i in range(1, len(trs)):
         tds = trs[i].find_elements(By.TAG_NAME, "td")
@@ -241,23 +259,19 @@ def acount_table_scraping(driver) -> str:
 
         acount_name = line[0]
         if ACOUNT_SBI1_NAME in acount_name:
-            acount_sbi_1_balance = line[1]
-            acount_sbi_1_latest_date = line[2][-13:-2]
-            acount_sbi_1_status = line[3]
+            # acount_sbi_1_balance = line[1]
+            acount_table_dct["sbi_1_latest_date"] = line[2][-13:-2]
+            acount_table_dct["sbi_1_status"] = line[3].rstrip()
         if ACOUNT_SBI2_NAME in acount_name:
-            acount_sbi_2_balance = line[1]
-            acount_sbi_2_latest_date = line[2][-13:-2]
-            acount_sbi_2_status = line[3]
+            acount_table_dct["sbi_2_balance"] = line[1].rstrip()
+            acount_table_dct["sbi_2_latest_date"] = line[2][-13:-2]
+            acount_table_dct["sbi_2_status"] = line[3].rstrip()
         if ACOUNT_BUSINESS_NAME in acount_name:
-            acount_business_balance = line[1]
-            acount_business_latest_date = line[2][-13:-2]
-            acount_business_status = line[3]
+            acount_table_dct["business_balance"] = line[1].rstrip()
+            acount_table_dct["business_latest_date"] = line[2][-13:-2]
+            acount_table_dct["business_status"] = line[3].rstrip()
 
-    acount1 = f"{SBI1_NAME}：{acount_sbi_1_balance}\n{acount_sbi_1_latest_date} {acount_sbi_1_status}"
-    acount2 = f"{SBI2_NAME}：{acount_sbi_2_balance}\n{acount_sbi_2_latest_date} {acount_sbi_2_status}"
-    acount3 = f"{BUSINESS_NAME}：{acount_business_balance}\n{acount_business_latest_date} {acount_business_status}"
-
-    return f"＊——最新の口座残高（生活・事業）——＊\n{acount1}\n\n{acount2}\n\n{acount3}"
+    return acount_table_dct
 
 
 def send_message(text: str):
