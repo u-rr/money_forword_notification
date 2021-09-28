@@ -55,6 +55,14 @@ def main(event, context):
     finally:
         acount_remaining_list = acount_table_scraping(driver)
 
+    # Select要素を取得
+    groups = get_select("group_id_hash", driver)
+
+    # プライベートグループじゃなかったらグループを変更する
+    if groups.first_selected_option.text != "プライベートの収支":
+        groups.select_by_visible_text("プライベートの収支")
+        time.sleep(1)
+
     # メイン口座の代表口座の残高だけをスクレイピング
     driver.find_element(By.CSS_SELECTOR, "#cNHmiFwd2QoSX5MiHCFs_w > td:nth-child(1) > a:nth-child(1)").click()
     sbi_1_balance = (
@@ -77,14 +85,6 @@ def main(event, context):
 
     # 念の為URL確認
     assert "spending_summaries" in driver.current_url
-
-    # Select要素を取得
-    groups = get_select("group_id_hash", driver)
-
-    # プライベートグループじゃなかったらグループを変更する
-    if groups.first_selected_option.text != "プライベートの収支":
-        groups.select_by_visible_text("プライベートの収支")
-        time.sleep(1)
 
     # 集計期間をスクレイピング
     period = (
